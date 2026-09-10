@@ -1,117 +1,73 @@
 import aiohttp
 import random
-
+from random import randint
+from datetime import datetime
 
 class Pokemon:
-
     pokemons = {}
 
     def __init__(self, pokemon_trainer):
         self.pokemon_trainer = pokemon_trainer
         self.pokemon_number = random.randint(1, 1000)
         self.name = None
-        self.level = 1
-        self.xp = 0
-        self.rare = random.random() < 0.10
-        self.hp = random.randint(80, 120)
-        self.max_hp = self.hp
-        self.power = random.randint(10, 20)
-
-        if pokemon_trainer not in Pokemon.pokemons:
-            Pokemon.pokemons[pokemon_trainer] = self
-
-    async def get_data(self):
-        url = f"https://pokeapi.co/api/v2/pokemon/{self.pokemon_number}"
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        return await response.json()
-        except Exception:
-            pass
-
-        return None
+        self.img = None
+        self.power = random.randint(30, 60)
+        self.hp = random.randint(200, 400)
+        self.last_feed_time = datetime.now()
+        if pokemon_trainer not in self.pokemons:
+            self.pokemons[pokemon_trainer] = self
 
     async def get_name(self):
-        data = await self.get_data()
-
-        if data:
-            return data["forms"][0]["name"]
-
-        return "pikachu"
-
-    async def show_img(self):
-        data = await self.get_data()
-
-        if data:
-            return data["sprites"]["front_default"]
-
-        return None
+        url = f'https://pokeapi.co/api/v2/pokemon/{self.pokemon_number}'
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data['forms'][0]['name']
+                else:
+                    return "Pikachu"
 
     async def info(self):
-        if self.name is None:
+        if not self.name:
             self.name = await self.get_name()
+        return f"""Pokémon ismi: {self.name}
+                Pokémon gücü: {self.power}
+                Pokémon sağlığı: {self.hp}"""
 
-        if self.rare:
-            return (
-                f"Pokémonunuzun ismi: **{self.name}**\n"
-                f"Seviye: **{self.level}**\n"
-                f"Nadir Pokémon olduğu için beslenirken daha fazla XP kazanır!"
-            )
-
-        return (
-            f"Pokémonunuzun ismi: **{self.name}**\n"
-            f"Seviye: **{self.level}**"
-        )
-
-    def feed(self):
-        xp_gain = 20
-
-        if self.rare:
-            xp_gain = 50
-
-        self.xp += xp_gain
-
-        message = (
-            f"Pokémonunuzu beslediniz!\n"
-            f"**{xp_gain} XP** kazandı!\n"
-        )
-
-        required_xp = self.level * 100
-
-        if self.xp >= required_xp:
-            self.xp -= required_xp
-            self.level += 1
-
-            message += (
-                f"**Tebrikler! Pokémonunuz seviye atladı!**\n"
-                f"Yeni seviye: **{self.level}**"
-            )
-        else:
-            message += (
-                f"Seviye: **{self.level}**\n"
-                f"XP: **{self.xp}/{required_xp}**"
-            )
-
-        return message
+    async def show_img(self):
+        url = f'https://pokeapi.co/api/v2/pokemon/{self.pokemon_number}'
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    img_url = data['sprites']['front_default']
+                    return img_url
+                else:
+                    return None
 
     async def attack(self, enemy):
-        damage = self.power
+        if isinstance(enemy, Wizard):
+            chance = randint(1, 5)
+            if chance == 1:
+                return "Sihirbaz Pokémon, savaşta bir kalkan kullandı!"
+        if enemy.hp > self.power:
+            enemy.hp -= self.power
+            return f"Pokémon eğitmeni @{self.pokemon_trainer} @{enemy.pokemon_trainer}'ne saldırdı\n@{enemy.pokemon_trainer}'nin sağlık durumu şimdi {enemy.hp}"
+        else:
+            enemy.hp = 0
+            return f"Pokémon eğitmeni @{self.pokemon_trainer} @{enemy.pokemon_trainer}'ni yendi!"
 
-        if enemy.hp > damage:
-            enemy.hp -= damage
+class Wizard(Pokemon):
+   async def feed(self):
+        return await super().feed(feed_interval= 10)    
 
-            return (
-                f"Pokémon eğitmeni @{self.pokemon_trainer} "
-                f"@{enemy.pokemon_trainer}'ne saldırdı\n"
-                f"Verilen hasar: **{damage}**\n"
-                f"@{enemy.pokemon_trainer}'nin sağlık durumu: **{enemy.hp}**"
-            )
-
-        enemy.hp = 0
-
-        return (
-            f"Pokémon eğitmeni @{self.pokemon_trainer} "
-            f"@{enemy.pokemon_trainer}'ni yendi!"
-        )
+class Fighter(Pokemon):
+    async def attack(self, enemy):
+        super_power = randint(5, 15)
+        self.power += super_power
+        result = await super().attack(enemy)
+        self.power -= super_power
+        return result + f"\nDövüşçü Pokémon süper saldırı kullandı. Eklenen güç: {super_power}"
+    
+    async def feed(self):
+        return await super().feed(hp_increase=15)
