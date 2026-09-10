@@ -1,197 +1,88 @@
-
 import discord
 from discord.ext import commands
-
 from config import token
-from logic import Pokemon
-
+from logic import Pokemon, Wizard, Fighter
+import random
+from datetime import datetime, timedelta
 
 intents = discord.Intents.default()
+intents.messages = True
 intents.message_content = True
 intents.guilds = True
-intents.messages = True
-
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents
-)
-
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Bot giriş yaptı: {bot.user}")
-    print("Komutlar hazır!")
-
+    print(f'Giriş yapıldı: {bot.user.name}')
 
 @bot.command()
 async def go(ctx):
-
-    author = str(ctx.author.id)
-
-    if author in Pokemon.pokemons:
-        await ctx.send(
-            "Zaten bir Pokémon'un var!\n"
-            "Bilgilerini görmek için `!pokemon` yaz."
-        )
-        return
-
-    pokemon = Pokemon(author)
-
-    info = await pokemon.info()
-
-    await ctx.send(
-        f"Pokémon'un oluşturuldu!\n\n"
-        f"{info}"
-    )
-
-    image_url = await pokemon.show_img()
-
-    if image_url:
-
-        embed = discord.Embed(
-            title=f"{pokemon.name}"
-        )
-
-        embed.set_image(url=image_url)
-
-        await ctx.send(embed=embed)
-
+    author = ctx.author.name
+    if author not in Pokemon.pokemons:
+        chance = random.randint(1, 3)
+        if chance == 1:
+            pokemon = Pokemon(author)
+        elif chance == 2:
+            pokemon = Wizard(author)
+        elif chance == 3:
+            pokemon = Fighter(author)
+        await ctx.send(await pokemon.info())
+        image_url = await pokemon.show_img()
+        if image_url:
+            embed = discord.Embed()
+            embed.set_image(url=image_url)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Pokemon görüntüsü yüklenemedi.")
+    else:
+        await ctx.send("Zaten bir Pokemon oluşturdunuz.")
 
 @bot.command()
-async def pokemon(ctx):
-
-    author = str(ctx.author.id)
-
-    if author not in Pokemon.pokemons:
-
-        await ctx.send(
-            "Henüz Pokémon'un yok!\n"
-            "Önce `!go` yaz."
-        )
-        return
-
-    pokemon = Pokemon.pokemons[author]
-
-    info = await pokemon.info()
-
-    await ctx.send(info)
-
+async def attack(ctx):
+    target = ctx.message.mentions[0] if ctx.message.mentions else None
+    if target:
+        if target.name in Pokemon.pokemons and ctx.author.name in Pokemon.pokemons:
+            enemy = Pokemon.pokemons[target.name]
+            attacker = Pokemon.pokemons[ctx.author.name]
+            result = await attacker.attack(enemy)
+            await ctx.send(result)
+        else:
+            await ctx.send("Savaşmak için her iki katılımcının da Pokemon sahibi olması gerekir!")
+    else:
+        await ctx.send("Saldırmak istediğiniz kullanıcıyı etiketleyerek belirtin.")
 
 @bot.command()
 async def info(ctx):
-
-    author = str(ctx.author.id)
-
+    author = ctx.author.name
     if author in Pokemon.pokemons:
-        pok = Pokemon.pokemons[author]
-        await ctx.send(await pok.info())
+        pokemon = Pokemon.pokemons[author]
+        await ctx.send(await pokemon.info())
     else:
-        await ctx.send(
-            "Önce !go komutunu kullanarak bir Pokémon oluşturmalısın."
-        )
+        await ctx.send("Pokémon sahibi değilsiniz!")
 
+async def feed(self, feed_interval= 20, hp_increase=10 ):
+    current_time = datetime.now() 
+    delta_time = timedelta(hours=feed_interval) 
+    if (current_time - self.last_feed_time) > delta_time :
+        self.hp += hp_increase
+        self.last_feed_time = current_time 
+        return f"Pokémon sağlığı geri yüklenir. Mevcut HP: {self.hp}"
+    else:
+        return f"Pokémonunuzu şu zaman besleyebilirsiniz:{current_time + delta_time }"
 
 @bot.command()
-async def besle(ctx):
-
-    author = str(ctx.author.id)
-
-    if author not in Pokemon.pokemons:
-
-        await ctx.send(
-            "Önce `!go` komutuyla Pokémon oluşturmalısın."
-        )
-        return
-
-    pokemon = Pokemon.pokemons[author]
-
-    result = pokemon.feed()
-
-    await ctx.send(result)
-
-
-@bot.command()
-async def attack(ctx, enemy: discord.Member):
-
-    attacker_id = str(ctx.author.id)
-    enemy_id = str(enemy.id)
-
-    if attacker_id == enemy_id:
-
-        await ctx.send(
-            "Kendine saldıramazsın!"
-        )
-        return
-
-    if attacker_id not in Pokemon.pokemons:
-
-        await ctx.send(
-            "Önce `!go` ile kendi Pokémon'unu oluştur."
-        )
-        return
-
-    if enemy_id not in Pokemon.pokemons:
-
-        await ctx.send(
-            f"{enemy.mention} adlı kullanıcının Pokémon'u yok."
-        )
-        return
-
-    attacker = Pokemon.pokemons[attacker_id]
-    defender = Pokemon.pokemons[enemy_id]
-
-    if attacker.hp <= 0:
-
-        await ctx.send(
-            "Pokémon'unun HP'si 0!\n"
-            "Savaşamazsın."
-        )
-        return
-
-    if defender.hp <= 0:
-
-        await ctx.send(
-            "Bu Pokémon'un HP'si zaten 0."
-        )
-        return
-
-    result = await attacker.attack(defender)
-
-    await ctx.send(result)
-
-
-@bot.event
-async def on_command_error(ctx, error):
-
-    if isinstance(error, commands.CommandNotFound):
-
-        await ctx.send(
-            "Böyle bir komut yok.\n"
-            "Kullanabileceğin komutlar:\n"
-            "`!go`\n"
-            "`!pokemon`\n"
-            "`!info`\n"
-            "`!besle`\n"
-            "`!attack @kullanıcı`"
-        )
-
-    elif isinstance(error, commands.MissingRequiredArgument):
-
-        await ctx.send(
-            "Eksik bilgi.\n"
-            "Örnek: `!attack @kullanıcı`"
-        )
-
-    elif isinstance(error, commands.MemberNotFound):
-
-        await ctx.send(
-            "Kullanıcı bulunamadı."
-        )
-
+async def feed(ctx):
+    author=ctx.author.name
+    if author in Pokemon.pokemons:
+        pokemon = Pokemon.pokemons[author]
+        response = await pokemon.feed()
+        await ctx.send(response)
     else:
+        await ctx.send("Böyle bir pokemon yok!")
 
-        print(f"Hata: {error}")
+
+
+
 
 
 bot.run(token)
-
